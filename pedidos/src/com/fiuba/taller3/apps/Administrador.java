@@ -17,9 +17,6 @@ public class Administrador {
 		idProducto = args[0];
 		cantidadAAgregarAStock = args[1];
 
-		System.out.println(idProducto);
-		System.out.println(cantidadAAgregarAStock);
-
 		ConnectionFactory factory = new ConnectionFactory();
 		factory.setHost("localhost");
 		Connection connection = factory.newConnection();

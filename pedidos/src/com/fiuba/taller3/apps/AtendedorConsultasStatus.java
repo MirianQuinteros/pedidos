@@ -1,60 +1,62 @@
 package com.fiuba.taller3.apps;
 
-import java.io.IOException;
-import java.util.regex.Pattern;
-
+import com.rabbitmq.client.AMQP.BasicProperties;
 import com.rabbitmq.client.*;
 
 public class AtendedorConsultasStatus {
 
 	public static void main(String[] args) throws Exception {
-		
-		ConnectionFactory factory = new ConnectionFactory();
-	    factory.setHost("localhost");
-	    Connection connection = factory.newConnection();
-	    Channel channel = connection.createChannel();
-	    channel.queueDeclare("consultas", true, false, false, null);
-	    System.out.println(" [*] Waiting for messages. To exit press CTRL+C");
-	    channel.basicQos(1);
-	    
-	    Connection connectionToEstado = factory.newConnection();
-	    Channel channelEstado = connectionToEstado.createChannel();
-	    channelEstado.queueDeclare("estadosPedido", true, false, false, null);
-	    channelEstado.basicQos(1);
+		PersistenciaDePedidos pedidos = new PersistenciaDePedidos();
+		Connection connection = null;
+		Channel channel = null;
+		try {
+			ConnectionFactory factory = new ConnectionFactory();
+			factory.setHost("localhost");
 
-		Consumer consumer = new DefaultConsumer(channel) {
-			@Override
-			public void handleDelivery(String consumerTag, Envelope envelope,
-					AMQP.BasicProperties properties, byte[] body)
-					throws IOException {
-				
-				String message = new String(body, "UTF-8");
+			connection = factory.newConnection();
+			channel = connection.createChannel();
 
-				System.out.println(" [x] Received '" + message + "'");
+			channel.queueDeclare("consultas", false, false, false, null);
+
+			channel.basicQos(1);
+
+			QueueingConsumer consumer = new QueueingConsumer(channel);
+			channel.basicConsume("consultas", false, consumer);
+
+			System.out.println(" [x] Awaiting RPC requests");
+
+			while (true) {
+				String response = null;
+
+				QueueingConsumer.Delivery delivery = consumer.nextDelivery();
+
+				BasicProperties props = delivery.getProperties();
+				BasicProperties replyProps = new BasicProperties.Builder()
+						.correlationId(props.getCorrelationId()).build();
+
 				try {
-					 doWork(message);
-				} catch (InterruptedException e) {
-					e.printStackTrace();
+					String message = new String(delivery.getBody(), "UTF-8");
+					Integer id = Integer.parseInt(message);
+					response = pedidos.getPedidoF(id).getEstado().toString();
 				} catch (Exception e) {
-					e.printStackTrace();
+					System.out.println(" [.] " + e.toString());
+					response = "";
 				} finally {
-					System.out.println(" [x] Done");
-					channel.basicAck(envelope.getDeliveryTag(), false);
+					channel.basicPublish("", props.getReplyTo(), replyProps,
+							response.getBytes("UTF-8"));
+					channel.basicAck(delivery.getEnvelope().getDeliveryTag(),
+							false);
 				}
 			}
-
-			private void doWork(String message) throws InterruptedException, Exception {
-				
-				String[] pair = message.split(Pattern.quote("|"));
-				
-				if (pair.length != 2) {
-					System.out.println("Algo salio mal con el formato de la consulta");
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally {
+			if (connection != null) {
+				try {
+					connection.close();
+				} catch (Exception ignore) {
 				}
-				channelEstado.basicPublish("", "estadosPedido", null, message.getBytes("UTF-8"));
-				System.out.println(" [x] Sent '" + message + "'");
-				
 			}
-		};
-	    channel.basicConsume("consultas", false, consumer);
+		}
 	}
 }

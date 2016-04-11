@@ -11,20 +11,20 @@ import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
 
-public class ManejadorDeStock {
-	
+public class AtendedorProcesarPedidos {
+
 	public static void main(String[] args) throws Exception {
 		
+		LoggerCrawler logger = new LoggerCrawler("Pedidos.log");
+		PersistenciaDePedidos pedidos = new PersistenciaDePedidos();
 		PersistenciaDeStock stock = new PersistenciaDeStock();
 		
 		ConnectionFactory factory = new ConnectionFactory();
 	    factory.setHost("localhost");
 	    Connection connection = factory.newConnection();
 	    Channel channel = connection.createChannel();
-
-	    channel.queueDeclare("cambiosStock", false, false, false, null);
+	    channel.queueDeclare("pedidosAProcesar", true, false, false, null);
 	    System.out.println(" [*] Waiting for messages. To exit press CTRL+C");
-
 	    channel.basicQos(1);
 
 		Consumer consumer = new DefaultConsumer(channel) {
@@ -40,26 +40,40 @@ public class ManejadorDeStock {
 					 doWork(message);
 				} catch (InterruptedException e) {
 					e.printStackTrace();
+				} catch (Exception e) {
+					e.printStackTrace();
 				} finally {
 					System.out.println(" [x] Done");
 					channel.basicAck(envelope.getDeliveryTag(), false);
 				}
 			}
 
-			private void doWork(String message) throws InterruptedException {
+			private void doWork(String message) throws InterruptedException, Exception {
 				
-				String[] pair = message.split(Pattern.quote("|"));
-				if ( pair.length != 3) {
-					System.out.println("Algo fallo en procesar el cambio de stock" + pair);
-					return;
-				}
-				if ( pair[2].equals("add") ) {
-					stock.agregarStock(new Integer(pair[0]), new Integer(pair[1]));
-					System.out.println("Se agrego " + pair[1] + " del producto " + pair[0]);
-				}
+				logger.getLogger().info("Voy a procesar el pedido : " + message);
 				
+				String[] parts = message.split(Pattern.quote("|"));
+				
+				Pedido p = new Pedido(parts[0], parts[1], parts[2]);
+				p.setEstado(EstadoPedido.getValue(new Integer(parts[3])));
+				
+				if ( stock.getDisponibilidadDeProductos(p.getProductos()) ) {
+					p.setEstado(EstadoPedido.ACEPTADO);
+				}
+				else {
+					p.setEstado(EstadoPedido.RECHAZADO);
+				}
+				if ( pedidos.updatePedidoF(p) ) {
+					logger.getLogger().info("Cambio el estado del pedido " + p.getIdPedido() 
+						+ " a: " + p.getEstado());
+				} else {
+					logger.getLogger().warning("No se pudo hacer update dle estado del pedido");
+				}
+
 			}
+
 		};
-	    channel.basicConsume("cambiosStock", false, consumer);
+		
+	    channel.basicConsume("pedidosAProcesar", false, consumer);
 	}
 }

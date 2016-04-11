@@ -1,5 +1,7 @@
 package com.fiuba.taller3.apps;
 
+import java.util.Random;
+
 import com.rabbitmq.client.*;
 
 public class Comprador {
@@ -16,19 +18,21 @@ public class Comprador {
 		nombreUsuarioComprador = args[0];		
 		productosPedidos = args[1];
 		
-		System.out.println(nombreUsuarioComprador);
-		System.out.println(productosPedidos);
-		
 		ConnectionFactory factory = new ConnectionFactory();
 	    factory.setHost("localhost");
 		Connection connection = factory.newConnection();
 		Channel channel = connection.createChannel();
-
 		channel.queueDeclare("pedidos", true, false, false, null);
-		String message = nombreUsuarioComprador.concat("|").concat(
-				productosPedidos);
+		
+		Long id = new Random().nextLong();
+		
+		String message = id.toString().concat("|")
+				.concat(nombreUsuarioComprador)
+				.concat("|").concat(productosPedidos);
+		
 		channel.basicPublish("", "pedidos", null, message.getBytes("UTF-8"));
 		System.out.println(" [x] Sent '" + message + "'");
+		System.out.println(" Tour TrackID is: " + id);
 		channel.close();
 		connection.close();
 		

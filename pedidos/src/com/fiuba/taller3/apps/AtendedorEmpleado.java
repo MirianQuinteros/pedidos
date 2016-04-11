@@ -14,6 +14,7 @@ public class AtendedorEmpleado {
 
 public static void main(String[] args) throws Exception {
 		
+		PersistenciaDePedidos pedidos = new PersistenciaDePedidos();
 		ConnectionFactory factory = new ConnectionFactory();
 	    factory.setHost("localhost");
 	    
@@ -22,11 +23,6 @@ public static void main(String[] args) throws Exception {
 	    channel.queueDeclare("entregasRealizadas", true, false, false, null);
 	    System.out.println(" [*] Waiting for messages. To exit press CTRL+C");
 	    channel.basicQos(1);
-
-	    Connection connectionToPedido = factory.newConnection();
-	    Channel channelPedido = connectionToPedido.createChannel();
-	    channelPedido.queueDeclare("estadosPedido", true, false, false, null);
-	    channelPedido.basicQos(1);
 
 		Consumer consumer = new DefaultConsumer(channel) {
 			@Override
@@ -50,10 +46,10 @@ public static void main(String[] args) throws Exception {
 			}
 
 			private void doWork(String message) throws InterruptedException, Exception {
-				
-				message = message.concat("|a|e");
-				channelPedido.basicPublish("", "estadosPedido", null, message.getBytes("UTF-8"));
-				System.out.println(" [x] Sent '" + message + "'");
+				Integer id = Integer.parseInt(message);
+				Pedido p = pedidos.getPedidoF(id);
+				p.setEstado(EstadoPedido.ENTREGADO);
+				pedidos.updatePedidoF(p);
 			}
 		};
 	    channel.basicConsume("entregasRealizadas", false, consumer);

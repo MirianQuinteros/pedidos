@@ -1,6 +1,7 @@
 package com.fiuba.taller3.apps;
 
 import java.io.IOException;
+import java.util.regex.Pattern;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
@@ -14,19 +15,16 @@ public class AtendedorAdministracion {
 
 	public static void main(String[] args) throws Exception {
 		
+		PersistenciaDeStock stock = new PersistenciaDeStock();
+		
 		ConnectionFactory factory = new ConnectionFactory();
 	    factory.setHost("localhost");
 	    
 	    Connection connection = factory.newConnection();
 	    Channel channel = connection.createChannel();
-	    channel.queueDeclare("adminStock", false, false, false, null);
+	    channel.queueDeclare("adminStock", true, false, false, null);
 	    System.out.println(" [*] Waiting for messages. To exit press CTRL+C");
 	    channel.basicQos(1);
-	    
-	    Connection connectionToStock = factory.newConnection();
-	    Channel channelStock = connectionToStock.createChannel();
-	    channelStock.queueDeclare("cambiosStock", false, false, false, null);
-	    channelStock.basicQos(1);
 
 		Consumer consumer = new DefaultConsumer(channel) {
 			@Override
@@ -51,9 +49,9 @@ public class AtendedorAdministracion {
 
 			private void doWork(String message) throws InterruptedException, Exception {
 				
-				message = message.concat("|add");
-				channelStock.basicPublish("", "cambiosStock", null, message.getBytes("UTF-8"));
-				System.out.println(" [x] Sent '" + message + "'");
+				String[] parts = message.split(Pattern.quote("|"));
+				
+ 				stock.agregarStock(new Integer(parts[0]), new Integer(parts[1]));
 				
 			}
 		};

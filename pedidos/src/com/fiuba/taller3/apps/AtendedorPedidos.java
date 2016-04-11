@@ -1,8 +1,6 @@
 package com.fiuba.taller3.apps;
 
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 import com.rabbitmq.client.AMQP;
@@ -24,14 +22,14 @@ public class AtendedorPedidos {
 	    factory.setHost("localhost");
 	    Connection connection = factory.newConnection();
 	    Channel channel = connection.createChannel();
-	    channel.queueDeclare("pedidos", false, false, false, null);
+	    channel.queueDeclare("pedidos", true, false, false, null);
 	    System.out.println(" [*] Waiting for messages. To exit press CTRL+C");
 	    channel.basicQos(1);
 	    
-//	    Connection connectionToEstado = factory.newConnection();
-//	    Channel channelEstado = connectionToEstado.createChannel();
-//	    channelEstado.queueDeclare("estadosPedido", true, false, false, null);
-//	    channelEstado.basicQos(1);
+		Connection connectionToProcesar = factory.newConnection();
+		Channel channelProcesar = connectionToProcesar.createChannel();
+		channelProcesar.queueDeclare("pedidosAProcesar", true, false, false, null);
+		channelProcesar.basicQos(1);
 
 		Consumer consumer = new DefaultConsumer(channel) {
 			@Override
@@ -58,32 +56,19 @@ public class AtendedorPedidos {
 				
 				logger.getLogger().info("Se recibio el pedido : " + message);
 				
-				message = message.concat("|rb");
-				
 				String[] part = message.split(Pattern.quote("|"));
-
-				Pedido p = new Pedido();
 				
-				p.setNombreSolicitante(part[0]);
-				p.setProductos(armarProductos(part[1]));
+				Pedido p = new Pedido(part[0], part[1], part[2]);
 				p.setEstado(EstadoPedido.RECIBIDO);
 				
-				pedidos.guardarPedido(p);
-
-			}
-
-			private Set<ProductoAPedir> armarProductos(String string) {
-
-				Set<ProductoAPedir> result = new HashSet<ProductoAPedir>();
-				String[] keyValue = string.split(Pattern.quote(";"));
-				for (String s : keyValue) {
-					String[] pair = s.split(Pattern.quote(":"));
-					ProductoAPedir producto = new ProductoAPedir(new Integer(
-							pair[0]), new Integer(pair[1]));
-					result.add(producto);
+				if ( !pedidos.guardarpedidoF(p) ) {
+					logger.getLogger().info("Error al guardar el pedido");
 				}
-				return result;
+				
+				message = message.concat("|" + p.getEstado().ordinal());
+				channelProcesar.basicPublish("", "pedidosAProcesar", null, message.getBytes());
 			}
+			
 		};
 		
 	    channel.basicConsume("pedidos", false, consumer);
